@@ -4,18 +4,23 @@ using OpenTK.Windowing.Common;
 using OpenTK.Windowing.Desktop;
 using OpenTK.Windowing.GraphicsLibraryFramework;
 using StbImageSharp;
+using System.Text.RegularExpressions;
 
 namespace RaceGame3D
 {
     public class Window : GameWindow
     {
-        private int _vao;
-        private int _vbo;
-        private int _texture;
+        private List<int> _vaos = new();
+        private List<int> _vbos = new();
+        private List<int> _ebos = new();
+
+        private List<int> _textures = new();
 
         private ModelLoader building;
+        private ModelLoader car;
 
         private Matrix4 _model;
+        private Matrix4 _model_car;
         private Matrix4 _view;
         private Matrix4 _projection;
 
@@ -25,13 +30,13 @@ namespace RaceGame3D
         private Vector3 _cameraFront = -Vector3.UnitZ;
         private Vector3 _cameraUp = Vector3.UnitY;
 
-        private float _cameraSpeed = 10f;
+        private float _cameraSpeed = 30f;
         private float _mouseSensitivity = 0.2f;
 
         private float _yaw = -90f;
         private float _pitch = -15f;
 
-        private float _fov = 60f;
+        private float _fov = 90f;
 
         private Vector2 _lastMousePosition;
         private bool _firstMouseMove = true;
@@ -57,89 +62,106 @@ namespace RaceGame3D
             building = new ModelLoader();
 
             building.Load(
-                "Assets/Models/building_G.obj"
+                "Assets/Models/Camellia_City.obj"
             );
 
-            _texture = LoadTexture(
-                building.TexturePath
-            );
+            //car = new ModelLoader();
+
+            //car.Load(
+            //    "Assets/Models/kamaro.obj"
+            //);
 
             _shader = new Shader(
                 "Shaders/shader.vert",
                 "Shaders/shader.frag"
             );
 
+            _shader.Use();
+            _shader.SetInt("texture0", 0);
 
-            // Create VAO
-            _vao = GL.GenVertexArray();
-            GL.BindVertexArray(_vao);
-
-
-            // Create VBO
-            _vbo = GL.GenBuffer();
-
-            GL.BindBuffer(
-                BufferTarget.ArrayBuffer,
-                _vbo
-            );
+            foreach (var mesh in building.Meshes)
+            {
+                int vao = GL.GenVertexArray();
+                int vbo = GL.GenBuffer();
+                int ebo = GL.GenBuffer();
 
 
-            // Upload vertices
-            GL.BufferData(
-                BufferTarget.ArrayBuffer,
-                building.Vertices.Count * sizeof(float),
-                building.Vertices.ToArray(),
-                BufferUsageHint.StaticDraw
-            );
+                GL.BindVertexArray(vao);
 
 
-            /*
-             Vertex format:
-
-             Position:
-             x y z
-
-             UV:
-             u v
-
-             Total:
-             5 floats
-            */
+                GL.BindBuffer(
+                    BufferTarget.ArrayBuffer,
+                    vbo
+                );
 
 
-            // Position attribute
-            GL.VertexAttribPointer(
-                0,
-                3,
-                VertexAttribPointerType.Float,
-                false,
-                5 * sizeof(float),
-                0
-            );
-
-            GL.EnableVertexAttribArray(0);
+                GL.BufferData(
+                    BufferTarget.ArrayBuffer,
+                    mesh.Vertices.Count * sizeof(float),
+                    mesh.Vertices.ToArray(),
+                    BufferUsageHint.StaticDraw
+                );
 
 
+                GL.BindBuffer(
+                    BufferTarget.ElementArrayBuffer,
+                    ebo
+                );
 
-            // Texture coordinates
-            GL.VertexAttribPointer(
-                1,
-                2,
-                VertexAttribPointerType.Float,
-                false,
-                5 * sizeof(float),
-                3 * sizeof(float)
-            );
 
+                GL.BufferData(
+                    BufferTarget.ElementArrayBuffer,
+                    mesh.Indices.Count * sizeof(uint),
+                    mesh.Indices.ToArray(),
+                    BufferUsageHint.StaticDraw
+                );
+
+
+                GL.VertexAttribPointer(
+                    0,
+                    3,
+                    VertexAttribPointerType.Float,
+                    false,
+                    5 * sizeof(float),
+                    0
+                );
+
+                GL.EnableVertexAttribArray(0);
+
+
+
+                GL.VertexAttribPointer(
+                    1,
+                    2,
+                    VertexAttribPointerType.Float,
+                    false,
+                    5 * sizeof(float),
+                    3 * sizeof(float)
+                );
+
+                GL.EnableVertexAttribArray(1);
+
+
+
+                _vaos.Add(vao);
+                _vbos.Add(vbo);
+                _ebos.Add(ebo);
+
+
+
+                _textures.Add(
+                    LoadTexture(mesh.TexturePath)
+                );
+            }
             GL.EnableVertexAttribArray(1);
 
 
 
             // Camera transforms
-            _model = Matrix4.Identity;
+            // _model_car = Matrix4.CreateScale(1.00f);
+            _model = Matrix4.CreateScale(1.01f);
 
-
-            _view = Matrix4.LookAt(
+        _view = Matrix4.LookAt(
                 _cameraPosition,
                 _cameraPosition + _cameraFront,
                 _cameraUp
@@ -154,10 +176,6 @@ namespace RaceGame3D
                     1000f
                 );
 
-
-            Console.WriteLine(
-                $"Vertices: {building.Vertices.Count / 5}"
-            );
         }
 
         private int LoadTexture(string path)
@@ -228,8 +246,10 @@ namespace RaceGame3D
             );
 
 
+
+
             Console.WriteLine(
-                $"Loaded texture: {path}"
+                $"Loaded texture: {Regex.Replace(path, @"^.*[\\/]", "")}"
             );
 
 
@@ -259,9 +279,14 @@ namespace RaceGame3D
             _shader.Use();
 
             _shader.SetMatrix4(
-                "model",
+                "_model",
                 _model
             );
+
+            //_shader.SetMatrix4(
+            //    "model_car",
+            //    _model_car
+            //);
 
             _shader.SetMatrix4(
                 "view",
@@ -274,20 +299,47 @@ namespace RaceGame3D
             );
 
 
-            GL.BindVertexArray(_vao);
+            for (int i = 0; i < building.Meshes.Count; i++)
+            {
+                GL.BindVertexArray(
+                    _vaos[i]
+                );
 
-            GL.ActiveTexture(TextureUnit.Texture0);
 
-            GL.BindTexture(
-                TextureTarget.Texture2D,
-                _texture
-            );
+                GL.ActiveTexture(
+                    TextureUnit.Texture0
+                );
 
-            GL.DrawArrays(
-                PrimitiveType.Triangles,
-                0,
-                building.Vertices.Count / 5
-            );
+
+                GL.BindTexture(
+                    TextureTarget.Texture2D,
+                    _textures[i]
+                );
+
+
+                GL.DrawElements(
+                    PrimitiveType.Triangles,
+                    building.Meshes[i].Indices.Count,
+                    DrawElementsType.UnsignedInt,
+                    0
+                );
+            }
+
+            for (int i = 0; i < building.Meshes.Count; i++)
+            {
+                GL.BindTexture(
+                    TextureTarget.Texture2D,
+                    _textures[i]
+                );
+
+
+                GL.DrawElements(
+                    PrimitiveType.Triangles,
+                    building.Meshes[i].Indices.Count,
+                    DrawElementsType.UnsignedInt,
+                    0
+                );
+            }
 
 
             SwapBuffers();
@@ -307,8 +359,20 @@ namespace RaceGame3D
 
         protected override void OnUnload()
         {
-            GL.DeleteBuffer(_vbo);
-            GL.DeleteVertexArray(_vao);
+            foreach (var vbo in _vbos)
+                GL.DeleteBuffer(vbo);
+
+
+            foreach (var ebo in _ebos)
+                GL.DeleteBuffer(ebo);
+
+
+            foreach (var vao in _vaos)
+                GL.DeleteVertexArray(vao);
+
+
+            foreach (var tex in _textures)
+                GL.DeleteTexture(tex);
 
             base.OnUnload();
         }

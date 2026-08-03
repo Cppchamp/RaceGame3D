@@ -2,209 +2,108 @@
 
 namespace RaceGame3D
 {
-    internal class ModelLoader
+    internal class ModelMesh
     {
         public List<float> Vertices = new();
+        public List<uint> Indices = new();
 
         public string TexturePath = "";
+    }
 
+    internal class ModelLoader
+    {
+        public List<ModelMesh> Meshes = new();
 
         public void Load(string path)
         {
-            AssimpContext importer = new();
+            Meshes.Clear();
 
+            AssimpContext importer = new();
 
             Scene scene = importer.ImportFile(
                 path,
                 PostProcessSteps.Triangulate |
                 PostProcessSteps.GenerateNormals |
-                PostProcessSteps.FlipUVs
-            );
-            TexturePath = FindTextureInMtl(path);
-
-            string modelDirectory =
-                Path.GetDirectoryName(path)!;
-
-
-            Console.WriteLine(
-                $"Materials: {scene.MaterialCount}"
+                PostProcessSteps.FlipWindingOrder
             );
 
-            foreach (var material in scene.Materials)
-            {
-                Console.WriteLine(
-                    $"Material: {material.Name}"
-                );
+            Console.WriteLine($"Materials: {scene.MaterialCount}");
 
-                int textureCount = material.GetMaterialTextureCount(
-                    TextureType.Diffuse
-                );
+            string folder = Path.GetDirectoryName(
+                Path.GetFullPath(path)
+            )!;
 
-                Console.WriteLine(
-                    $"Diffuse textures: {textureCount}"
-                );
-
-
-                if (textureCount > 0)
-                {
-                    TextureSlot textureSlot;
-
-                    material.GetMaterialTexture(
-                        TextureType.Diffuse,
-                        0,
-                        out textureSlot
-                    );
-
-
-                    TexturePath = Path.Combine(
-                        Path.GetDirectoryName(path)!,
-                        textureSlot.FilePath
-                    );
-
-
-                    Console.WriteLine(
-                        $"Texture: {TexturePath}"
-                    );
-
-
-                    Console.WriteLine(
-                        $"Exists: {File.Exists(TexturePath)}"
-                    );
-                }
-            }
-
-            // Read mesh data
             foreach (var mesh in scene.Meshes)
             {
-                Console.WriteLine(
-                    $"Mesh material: {mesh.MaterialIndex}"
-                );
+                ModelMesh modelMesh = new();
 
+                bool hasUV = mesh.HasTextureCoords(0);
 
-                bool hasUV =
-                    mesh.HasTextureCoords(0);
-
-
-                for (int i = 0; i < mesh.Vertices.Count; i++)
+                // Vertices
+                for (int i = 0; i < mesh.VertexCount; i++)
                 {
-                    var vertex =
-                        mesh.Vertices[i];
+                    var v = mesh.Vertices[i];
 
+                    modelMesh.Vertices.Add(v.X);
+                    modelMesh.Vertices.Add(v.Y);
+                    modelMesh.Vertices.Add(v.Z);
 
-                    // Position
-                    Vertices.Add(vertex.X);
-                    Vertices.Add(vertex.Y);
-                    Vertices.Add(vertex.Z);
-
-
-
-                    // UV
                     if (hasUV)
                     {
-                        var uv =
-                            mesh.TextureCoordinateChannels[0][i];
+                        var uv = mesh.TextureCoordinateChannels[0][i];
 
-
-                        Vertices.Add(uv.X);
-                        Vertices.Add(uv.Y);
+                        modelMesh.Vertices.Add(uv.X);
+                        modelMesh.Vertices.Add(1.0f - uv.Y);
                     }
                     else
                     {
-                        Vertices.Add(0);
-                        Vertices.Add(0);
+                        modelMesh.Vertices.Add(0);
+                        modelMesh.Vertices.Add(0);
                     }
                 }
-            }
 
-
-            Console.WriteLine(
-                $"Loaded {Vertices.Count / 5} vertices"
-            );
-        }
-
-        private string FindTextureInMtl(string objPath)
-        {
-            string folder = Path.GetDirectoryName(
-                Path.GetFullPath(objPath)
-            )!;
-
-
-            string mtlFile = "";
-
-
-            // Find MTL name from OBJ
-            foreach (string line in File.ReadLines(objPath))
-            {
-                if (line.StartsWith("mtllib"))
+                // Indices
+                foreach (var face in mesh.Faces)
                 {
-                    mtlFile = line.Substring(7).Trim();
-                    break;
+                    foreach (var index in face.Indices)
+                    {
+                        modelMesh.Indices.Add((uint)index);
+                    }
+                }
+
+                // Texture
+                Material material = scene.Materials[mesh.MaterialIndex];
+
+                if (material.GetMaterialTextureCount(TextureType.Diffuse) > 0)
+                {
+                    material.GetMaterialTexture(
+                        TextureType.Diffuse,
+                        0,
+                        out TextureSlot slot
+                    );
+
+                    modelMesh.TexturePath = Path.Combine(folder, slot.FilePath);
+
+                    Console.WriteLine($"Mesh texture: {slot.FilePath}");
+                }
+
+                if (!string.IsNullOrWhiteSpace(modelMesh.TexturePath) && File.Exists(modelMesh.TexturePath))
+                {
+                    Meshes.Add(modelMesh);
+
+                    Console.WriteLine(
+                        $"Keeping: {Path.GetFileName(modelMesh.TexturePath)}"
+                    );
+                }
+                else
+                {
+                    Console.WriteLine(
+                        $"Skipping mesh (no texture)"
+                    );
                 }
             }
 
-
-            if (string.IsNullOrEmpty(mtlFile))
-            {
-                Console.WriteLine("No mtllib in OBJ");
-                return "";
-            }
-
-
-            string mtlPath = Path.Combine(
-                folder,
-                mtlFile
-            );
-
-
-            Console.WriteLine(
-                $"MTL path: {mtlPath}"
-            );
-
-
-            if (!File.Exists(mtlPath))
-            {
-                Console.WriteLine("MTL missing");
-                return "";
-            }
-
-
-
-            foreach (string line in File.ReadLines(mtlPath))
-            {
-                string cleanLine = line.Trim();
-
-
-                if (cleanLine.StartsWith("map_Kd"))
-                {
-                    string textureName =
-                        cleanLine.Substring(6).Trim();
-
-
-                    string texturePath =
-                        Path.Combine(
-                            folder,
-                            textureName
-                        );
-
-
-                    Console.WriteLine(
-                        $"Texture path: {texturePath}"
-                    );
-
-
-                    Console.WriteLine(
-                        $"Texture exists: {File.Exists(texturePath)}"
-                    );
-
-
-                    return texturePath;
-                }
-            }
-
-
-            Console.WriteLine("map_Kd not found");
-
-            return "";
+            Console.WriteLine($"Loaded {Meshes.Count} meshes");
         }
     }
 }
