@@ -8,52 +8,68 @@ namespace RaceGame3D
         public List<uint> Indices = new();
 
         public string TexturePath = "";
+        public int IndexCount;
+
     }
+
 
     internal class ModelLoader
     {
         public List<ModelMesh> Meshes = new();
 
+
         public void Load(string path)
         {
             Meshes.Clear();
 
-            AssimpContext importer = new();
+            using AssimpContext importer = new();
 
             Scene scene = importer.ImportFile(
                 path,
                 PostProcessSteps.Triangulate |
                 PostProcessSteps.GenerateNormals |
-                PostProcessSteps.FlipWindingOrder
+                PostProcessSteps.FlipUVs |
+                PostProcessSteps.JoinIdenticalVertices
             );
 
+
+            Console.WriteLine($"Meshes: {scene.MeshCount}");
             Console.WriteLine($"Materials: {scene.MaterialCount}");
+            Console.WriteLine($"Textures embedded: {scene.TextureCount}");
+
 
             string folder = Path.GetDirectoryName(
                 Path.GetFullPath(path)
             )!;
 
+
             foreach (var mesh in scene.Meshes)
             {
                 ModelMesh modelMesh = new();
 
+
                 bool hasUV = mesh.HasTextureCoords(0);
+
 
                 // Vertices
                 for (int i = 0; i < mesh.VertexCount; i++)
                 {
-                    var v = mesh.Vertices[i];
+                    var vertex = mesh.Vertices[i];
 
-                    modelMesh.Vertices.Add(v.X);
-                    modelMesh.Vertices.Add(v.Y);
-                    modelMesh.Vertices.Add(v.Z);
+
+                    modelMesh.Vertices.Add(vertex.X);
+                    modelMesh.Vertices.Add(vertex.Y);
+                    modelMesh.Vertices.Add(vertex.Z);
+
 
                     if (hasUV)
                     {
-                        var uv = mesh.TextureCoordinateChannels[0][i];
+                        var uv =
+                            mesh.TextureCoordinateChannels[0][i];
+
 
                         modelMesh.Vertices.Add(uv.X);
-                        modelMesh.Vertices.Add(1.0f - uv.Y);
+                        modelMesh.Vertices.Add(uv.Y);
                     }
                     else
                     {
@@ -61,6 +77,8 @@ namespace RaceGame3D
                         modelMesh.Vertices.Add(0);
                     }
                 }
+
+
 
                 // Indices
                 foreach (var face in mesh.Faces)
@@ -70,40 +88,98 @@ namespace RaceGame3D
                         modelMesh.Indices.Add((uint)index);
                     }
                 }
+                modelMesh.IndexCount = modelMesh.Indices.Count;
 
-                // Texture
-                Material material = scene.Materials[mesh.MaterialIndex];
 
-                if (material.GetMaterialTextureCount(TextureType.Diffuse) > 0)
+                // Texture loading
+                if (mesh.MaterialIndex >= 0)
                 {
-                    material.GetMaterialTexture(
-                        TextureType.Diffuse,
-                        0,
-                        out TextureSlot slot
-                    );
+                    Material material =
+                        scene.Materials[mesh.MaterialIndex];
 
-                    modelMesh.TexturePath = Path.Combine(folder, slot.FilePath);
-
-                    Console.WriteLine($"Mesh texture: {slot.FilePath}");
-                }
-
-                if (!string.IsNullOrWhiteSpace(modelMesh.TexturePath) && File.Exists(modelMesh.TexturePath))
-                {
-                    Meshes.Add(modelMesh);
 
                     Console.WriteLine(
-                        $"Keeping: {Path.GetFileName(modelMesh.TexturePath)}"
+                        $"Material: {material.Name}"
                     );
-                }
-                else
-                {
+
+
+                    int textureCount =
+                        material.GetMaterialTextureCount(
+                            TextureType.Diffuse
+                        );
+
+
                     Console.WriteLine(
-                        $"Skipping mesh (no texture)"
+                        $"Diffuse textures: {textureCount}"
                     );
+
+
+                    if (textureCount > 0)
+                    {
+                        material.GetMaterialTexture(
+                            TextureType.Diffuse,
+                            0,
+                            out TextureSlot slot
+                        );
+
+
+                        string textureFile =
+                            slot.FilePath;
+
+
+                        // Embedded texture
+                        if (textureFile.StartsWith("*"))
+                        {
+                            Console.WriteLine(
+                                "Embedded texture found"
+                            );
+
+                            modelMesh.TexturePath =
+                                textureFile;
+                        }
+                        else
+                        {
+                            textureFile =
+                                textureFile.Replace("\\", "/");
+
+
+                            modelMesh.TexturePath =
+                                Path.GetFullPath(
+                                    Path.Combine(
+                                        folder,
+                                        textureFile
+                                    )
+                                );
+
+
+                            Console.WriteLine(
+                                $"Texture: {modelMesh.TexturePath}"
+                            );
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine(
+                            "No diffuse texture"
+                        );
+                    }
                 }
+
+
+
+                // NEVER skip meshes
+                Meshes.Add(modelMesh);
+
+
+                Console.WriteLine(
+                    $"Loaded mesh vertices: {mesh.VertexCount}"
+                );
             }
 
-            Console.WriteLine($"Loaded {Meshes.Count} meshes");
+
+            Console.WriteLine(
+                $"Loaded {Meshes.Count} meshes"
+            );
         }
     }
 }
