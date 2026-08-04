@@ -17,6 +17,8 @@ namespace RaceGame3D
         private List<int> _carVaos = new();
         private List<int> _carVbos = new();
         private List<int> _carEbos = new();
+        private int _skyboxVAO;
+        private int _skyboxVBO;
 
         private List<int> _textures = new();
         private List<int> _carTextures = new();
@@ -33,6 +35,7 @@ namespace RaceGame3D
         private Matrix4 _projection;
 
         private Shader _shader;
+        private Shader _skyboxShader;
 
         private Vector3 _cameraPosition = new Vector3(0, 10, 30);
         private Vector3 _cameraFront = -Vector3.UnitZ;
@@ -73,6 +76,24 @@ namespace RaceGame3D
 
         private Vector3 _carVelocityVector = Vector3.Zero;
 
+        private List<int> _wheelMeshes = new();
+        private List<int> _frontWheels = new();
+
+        private float _wheelRotation = 0f;
+        private float _wheelSteer = 0f;
+
+        private int _skyTexture;
+
+        enum CarCameraMode
+        {
+            Chase,
+            Side,
+            Front,
+            Hood
+        }
+
+        private CarCameraMode _carCameraMode = CarCameraMode.Chase;
+
 
         public Window(
             GameWindowSettings gameWindowSettings,
@@ -97,11 +118,47 @@ namespace RaceGame3D
                 "Assets/Models/Camellia_City.obj"
             );
 
+            _skyTexture = LoadTexture("Assets/Background/skybox.png");
+
+            CreateSkybox();
+
+            _skyboxShader = new Shader(
+                "Shaders/skybox.vert",
+                "Shaders/skybox.frag"
+            );
+
             car = new ModelLoader();
 
             car.Load(
                 "Assets/Models/ghini.obj"
             );
+
+            for (int i = 0; i < car.Meshes.Count; i++)
+            {
+                string name = car.Meshes[i].Name.ToLower();
+
+                Console.WriteLine($"{i}: {name}");
+
+
+                if (name.Contains("wheels") ||
+                    name == "texture")
+                {
+                    _wheelMeshes.Add(i);
+                }
+
+
+                // front left + right wheels AND their tire texture meshes
+                if (i == 3 || i == 4 ||
+
+                    i == 9 || i == 10)
+                {
+                    _frontWheels.Add(i);
+
+                    Console.WriteLine(
+                        $"STEERING WHEEL: {i} {name}"
+                    );
+                }
+            }
 
             _shader = new Shader(
                 "Shaders/shader.vert",
@@ -251,12 +308,14 @@ namespace RaceGame3D
             );
 
 
+
             Console.WriteLine(
                 $"Loaded texture: {Path.GetFileName(path)}"
             );
 
             return texture;
         }
+
 
         private int CreateWhiteTexture()
         {
@@ -288,6 +347,92 @@ namespace RaceGame3D
 
 
             return texture;
+        }
+
+        private void CreateSkybox()
+        {
+            float[] vertices =
+            {
+                // positions        // UV
+                -1,-1,-1, 0,0,
+                 1,-1,-1, 1,0,
+                 1, 1,-1, 1,1,
+                -1, 1,-1, 0,1,
+
+                -1,-1, 1, 0,0,
+                 1,-1, 1, 1,0,
+                 1, 1, 1, 1,1,
+                -1, 1, 1, 0,1
+            };
+
+
+            uint[] indices =
+            {
+                0,1,2, 2,3,0,
+                4,5,6, 6,7,4,
+                0,4,7, 7,3,0,
+                1,5,6, 6,2,1,
+                3,2,6, 6,7,3,
+                0,1,5, 5,4,0
+            };
+
+
+            _skyboxVAO = GL.GenVertexArray();
+            _skyboxVBO = GL.GenBuffer();
+            int ebo = GL.GenBuffer();
+
+
+            GL.BindVertexArray(_skyboxVAO);
+
+
+            GL.BindBuffer(
+                BufferTarget.ArrayBuffer,
+                _skyboxVBO
+            );
+
+            GL.BufferData(
+                BufferTarget.ArrayBuffer,
+                vertices.Length * sizeof(float),
+                vertices,
+                BufferUsageHint.StaticDraw
+            );
+
+
+            GL.BindBuffer(
+                BufferTarget.ElementArrayBuffer,
+                ebo
+            );
+
+            GL.BufferData(
+                BufferTarget.ElementArrayBuffer,
+                indices.Length * sizeof(uint),
+                indices,
+                BufferUsageHint.StaticDraw
+            );
+
+
+            GL.VertexAttribPointer(
+                0,
+                3,
+                VertexAttribPointerType.Float,
+                false,
+                5 * sizeof(float),
+                0
+            );
+
+            GL.EnableVertexAttribArray(0);
+
+
+            GL.VertexAttribPointer(
+                1,
+                2,
+                VertexAttribPointerType.Float,
+                false,
+                5 * sizeof(float),
+                3 * sizeof(float)
+            );
+
+            GL.EnableVertexAttribArray(1);
         }
 
         private void LoadModelBuffers(
@@ -387,6 +532,47 @@ namespace RaceGame3D
                 ClearBufferMask.DepthBufferBit
             );
 
+            GL.DepthMask(false);
+
+            _skyboxShader.Use();
+
+            _skyboxShader.SetMatrix4(
+                "view",
+                _view
+            );
+
+            _skyboxShader.SetMatrix4(
+                "projection",
+                _projection
+            );
+
+
+            GL.ActiveTexture(TextureUnit.Texture0);
+
+            GL.BindTexture(
+                TextureTarget.Texture2D,
+                _skyTexture
+            );
+
+
+            _skyboxShader.SetInt(
+                "skyTexture",
+                0
+            );
+
+
+            GL.BindVertexArray(_skyboxVAO);
+
+            GL.DrawElements(
+                PrimitiveType.Triangles,
+                36,
+                DrawElementsType.UnsignedInt,
+                0
+            );
+
+
+            GL.DepthMask(true);
+
 
             // Use shader
             _shader.Use();
@@ -406,6 +592,7 @@ namespace RaceGame3D
                 _projection
             );
 
+            //BUILDING MODEL
 
             for (int i = 0; i < building.Meshes.Count; i++)
             {
@@ -433,29 +620,39 @@ namespace RaceGame3D
                 );
             }
 
+            //CAR MODEL
+
             _shader.SetMatrix4(
                 "_model",
                 _model_car
             );
 
-
             for (int i = 0; i < car.Meshes.Count; i++)
             {
-                GL.BindVertexArray(
-                    _carVaos[i]
+                Matrix4 meshModel = _model_car;
+
+
+                if (_wheelMeshes.Contains(i))
+                {
+                    meshModel = ApplyWheelTransform(
+                        _model_car,
+                        i
+                    );
+                }
+
+
+                _shader.SetMatrix4(
+                    "_model",
+                    meshModel
                 );
 
 
-                GL.ActiveTexture(
-                    TextureUnit.Texture0
-                );
-
+                GL.BindVertexArray(_carVaos[i]);
 
                 GL.BindTexture(
                     TextureTarget.Texture2D,
                     _carTextures[i]
                 );
-
 
                 GL.DrawElements(
                     PrimitiveType.Triangles,
@@ -464,7 +661,6 @@ namespace RaceGame3D
                     0
                 );
             }
-
 
             SwapBuffers();
         }
@@ -519,10 +715,41 @@ namespace RaceGame3D
         protected override void OnUpdateFrame(FrameEventArgs e)
         {
             base.OnUpdateFrame(e);
+            // WHEEL SPIN BASED ON SPEED
+            float wheelRadius = 0.35f;
+
+            // real speed of the car
+            float wheelSpeed =
+                _carVelocityVector.Length;
+
+            // keep direction when reversing
+            float direction =
+                MathF.Sign(
+                    Vector3.Dot(
+                        _carVelocityVector,
+                        new Vector3(
+                            MathF.Sin(MathHelper.DegreesToRadians(_carRotation)),
+                            0,
+                            MathF.Cos(MathHelper.DegreesToRadians(_carRotation))
+                        )
+                    )
+                );
+
+            _wheelRotation +=
+                (wheelSpeed * direction / wheelRadius)
+                * (float)e.Time;
+
+
+            // prevent huge values
+            if (_wheelRotation > MathF.PI * 2)
+                _wheelRotation -= MathF.PI * 2;
+
+            if (_wheelRotation < -MathF.PI * 2)
+                _wheelRotation += MathF.PI * 2;
 
             UpdateControls((float)e.Time);
         }
-        
+
         private void UpdateCamera(float deltaTime)
         {
             float speed = _cameraSpeed * deltaTime;
@@ -595,6 +822,9 @@ namespace RaceGame3D
             if (KeyboardState.IsKeyDown(Keys.D))
                 steering = -1;
 
+            _wheelSteer =
+                steering *
+                MathHelper.DegreesToRadians(35f);
 
 
             // ENGINE
@@ -671,6 +901,16 @@ namespace RaceGame3D
                 speedFactor *
                 deltaTime;
 
+            // front wheel steering angle
+            float targetSteer = steering * 0.55f;
+
+            _wheelSteer =
+                MathHelper.Lerp(
+                    _wheelSteer,
+                    targetSteer,
+                    deltaTime * 10f
+                );
+
 
 
             // REBUILD DIRECTIONS AFTER TURN
@@ -699,7 +939,7 @@ namespace RaceGame3D
             float grip;
 
             if (drifting)
-                grip = 2.0f;       // loose rear tires
+                grip = 0.8f;       // loose rear tires
             else
                 grip = 12.0f;      // normal tires
 
@@ -748,8 +988,6 @@ namespace RaceGame3D
             {
                 _carVelocity = 0;
             }
-
-
 
             _carPosition +=
                 _carVelocityVector *
@@ -873,44 +1111,105 @@ namespace RaceGame3D
                 UpdateCar(deltaTime);
                 UpdateCarCamera();
             }
+
+            if (KeyboardState.IsKeyPressed(Keys.V))
+            {
+                CycleCamera();
+            }
         }
 
         private void UpdateCarCamera()
         {
+            float radians = MathHelper.DegreesToRadians(_carRotation);
+
             Vector3 forward = new Vector3(
-                MathF.Sin(MathHelper.DegreesToRadians(_carRotation)),
+                MathF.Sin(radians),
                 0,
-                MathF.Cos(MathHelper.DegreesToRadians(_carRotation))
+                MathF.Cos(radians)
             );
 
+            Vector3 right = new Vector3(
+                forward.Z,
+                0,
+                -forward.X
+            );
 
-            // Camera distance behind car
-            float distance = 8f;
-
-            // Camera height
-            float height = 3.0f;
+            Vector3 target;
 
 
-            _cameraPosition =
-                _carPosition
-                - forward * distance
-                + Vector3.UnitY * height;
+            switch (_carCameraMode)
+            {
+                case CarCameraMode.Chase:
+                    _cameraPosition =
+                        _carPosition
+                        - forward * 8f
+                        + Vector3.UnitY * 3f;
+
+                    target = _carPosition + Vector3.UnitY;
+                    break;
+
+
+                case CarCameraMode.Side:
+                    _cameraPosition =
+                        _carPosition
+                        + right * 8f
+                        + Vector3.UnitY * 3f;
+
+                    target = _carPosition + Vector3.UnitY;
+                    break;
+
+
+                case CarCameraMode.Front:
+                    _cameraPosition =
+                        _carPosition
+                        + forward * 8f
+                        + Vector3.UnitY * 3f;
+
+                    target = _carPosition + Vector3.UnitY;
+                    break;
+
+
+                case CarCameraMode.Hood:
+                    // Put camera on hood
+                    _cameraPosition =
+                        _carPosition
+                        + forward * 1.5f
+                        + Vector3.UnitY * 1.2f;
+
+                    // Look forward, not at car
+                    target =
+                        _cameraPosition
+                        + forward * 20f
+                        + Vector3.UnitY * 0.2f;
+
+                    break;
+
+
+                default:
+                    target = _carPosition;
+                    break;
+            }
 
 
             _cameraFront =
-                Vector3.Normalize(
-                    (_carPosition + Vector3.UnitY * 1.0f)
-                    - _cameraPosition
-                );
+                Vector3.Normalize(target - _cameraPosition);
 
 
             _view = Matrix4.LookAt(
                 _cameraPosition,
-                _cameraPosition + _cameraFront,
+                target,
                 _cameraUp
             );
         }
-        
+
+        private void CycleCamera()
+        {
+            _carCameraMode++;
+
+            if (_carCameraMode > CarCameraMode.Hood)
+                _carCameraMode = CarCameraMode.Chase;
+        }
+
         private int LoadTextureCached(string path)
         {
             if (textureCache.ContainsKey(path))
@@ -922,6 +1221,37 @@ namespace RaceGame3D
 
             return tex;
         }
-    }
 
+        private Matrix4 ApplyWheelTransform(
+          Matrix4 carMatrix,
+          int meshIndex)
+        {
+            Vector3 pivot = car.Meshes[meshIndex].Pivot;
+
+            Matrix4 transform =
+                Matrix4.CreateTranslation(-pivot);
+
+
+            // roll wheel around axle
+            if (_wheelMeshes.Contains(meshIndex))
+            {
+                transform *=
+                    Matrix4.CreateRotationX(_wheelRotation);
+            }
+
+
+            // steer front wheels
+            if (_frontWheels.Contains(meshIndex))
+            {
+                transform *=
+                    Matrix4.CreateRotationY(_wheelSteer);
+            }
+
+
+            transform *= Matrix4.CreateTranslation(pivot);
+
+
+            return transform * carMatrix;
+        }
+    }
 }

@@ -1,4 +1,6 @@
 ﻿using Assimp;
+using OpenTK.Mathematics;
+using System.Threading.Channels;
 
 namespace RaceGame3D
 {
@@ -8,7 +10,10 @@ namespace RaceGame3D
         public List<uint> Indices = new();
 
         public string TexturePath = "";
+        public string Name = "";
         public int IndexCount;
+
+        public Vector3 Pivot = Vector3.Zero;
 
     }
 
@@ -42,19 +47,31 @@ namespace RaceGame3D
                 Path.GetFullPath(path)
             )!;
 
-
+      
             foreach (var mesh in scene.Meshes)
             {
                 ModelMesh modelMesh = new();
 
+                modelMesh.Name = mesh.Name;
+
+                Console.WriteLine(
+                    $"IMPORTING MESH: {mesh.Name}"
+                );
 
                 bool hasUV = mesh.HasTextureCoords(0);
 
+                Vector3 center = Vector3.Zero;
 
                 // Vertices
                 for (int i = 0; i < mesh.VertexCount; i++)
                 {
                     var vertex = mesh.Vertices[i];
+
+                    center += new Vector3(
+                        vertex.X,
+                        vertex.Y,
+                        vertex.Z
+                    );
 
 
                     modelMesh.Vertices.Add(vertex.X);
@@ -78,7 +95,8 @@ namespace RaceGame3D
                     }
                 }
 
-
+                modelMesh.Pivot =
+                    center / mesh.VertexCount;
 
                 // Indices
                 foreach (var face in mesh.Faces)
