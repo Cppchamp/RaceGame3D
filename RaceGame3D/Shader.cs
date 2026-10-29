@@ -18,12 +18,14 @@ namespace RaceGame3D
             int vertex = GL.CreateShader(ShaderType.VertexShader);
             GL.ShaderSource(vertex, vertexCode);
             GL.CompileShader(vertex);
+            Console.WriteLine(GL.GetShaderInfoLog(vertex));
 
 
             int fragment = GL.CreateShader(ShaderType.FragmentShader);
             GL.ShaderSource(fragment, fragmentCode);
             GL.CompileShader(fragment);
-
+            Console.WriteLine(GL.GetShaderInfoLog(fragment));
+    
 
             Handle = GL.CreateProgram();
 
@@ -31,7 +33,7 @@ namespace RaceGame3D
             GL.AttachShader(Handle, fragment);
 
             GL.LinkProgram(Handle);
-
+            Console.WriteLine(GL.GetProgramInfoLog(Handle));
 
             GL.DeleteShader(vertex);
             GL.DeleteShader(fragment);

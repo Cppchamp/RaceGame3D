@@ -18,7 +18,7 @@ namespace RaceGame3D
             };
             
             // To create a new window, create a class that extends GameWindow, then call Run() on it.
-            using Window window = new(GameWindowSettings.Default, nativeWindowSettings);
+            using Window window = new(gameWindowSettings: GameWindowSettings.Default, nativeWindowSettings);
 
             window.Run();
 
