@@ -106,6 +106,8 @@ namespace RaceGame3D
         private float _carAcceleration = 15f;
 
         private float _carRotation = 0f;
+        private float _carPitch = 0f;
+        private float _targetCarPitch = 0f;
 
         private float _grip = 12f;
         private float _driftGrip = 1.5f;
@@ -214,6 +216,7 @@ namespace RaceGame3D
             _shader.Use();
             _shader.SetInt("texture0", 0);
 
+            InitializeTerrainNoise();
             GenerateMountainTrack();
 
             LoadModelBuffers(
@@ -381,6 +384,8 @@ namespace RaceGame3D
                 _wheelRotation += MathF.PI * 2;
 
             UpdateControls((float)e.Time);
+            UpdateCarPitch((float)e.Time);
+            UpdateCarMatrix();
             UpdateHUD((float)e.Time);
         }
     }

@@ -197,16 +197,51 @@ namespace RaceGame3D
                 _carPosition.X,
                 _carPosition.Z);
 
-            _carPosition.Y = groundHeight + 0.5f;
+            _carPosition.Y = groundHeight + 0.3f;
 
             UpdateCarMatrix();
             UpdateDriftParticles(deltaTime);
+        }
+
+        private void UpdateCarPitch(float deltaTime)
+        {
+            Vector3 forward = new Vector3(
+                MathF.Sin(MathHelper.DegreesToRadians(_carRotation)),
+                0f,
+                MathF.Cos(MathHelper.DegreesToRadians(_carRotation))
+            );
+
+            float sampleDistance = 2.0f;
+
+            Vector3 ahead = _carPosition + forward * sampleDistance;
+            Vector3 behind = _carPosition - forward * sampleDistance;
+
+            float heightAhead = GetTerrainHeight(ahead.X, ahead.Z);
+            float heightBehind = GetTerrainHeight(behind.X, behind.Z);
+
+            float slope = (heightAhead - heightBehind) / (sampleDistance * 2f);
+
+            // Positive pitch means nose up.
+            _targetCarPitch = -MathF.Atan(slope);
+
+            // Limit the visual tilt to approximately 15 degrees.
+            _targetCarPitch = MathHelper.Clamp(
+                _targetCarPitch,
+                MathHelper.DegreesToRadians(-15f),
+                MathHelper.DegreesToRadians(15f)
+            );
+
+            // Smooth the transition.
+            float smooth = 1f - MathF.Exp(-5f * deltaTime);
+
+            _carPitch += (_targetCarPitch - _carPitch) * smooth;
         }
 
         private void UpdateCarMatrix()
         {
             _model_car =
                 Matrix4.CreateScale(1.0f) *
+                Matrix4.CreateRotationX(_carPitch) *
                 Matrix4.CreateRotationY(
                     MathHelper.DegreesToRadians(_carRotation)
                 ) *

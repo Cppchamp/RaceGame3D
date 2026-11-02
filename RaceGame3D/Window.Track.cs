@@ -11,6 +11,24 @@ namespace RaceGame3D
 {
     public partial class Window : GameWindow
     {
+        private FastNoiseLite _terrainNoise;
+
+        private void InitializeTerrainNoise()
+        {
+            _terrainNoise = new FastNoiseLite(TrackSeed);
+
+            _terrainNoise.SetNoiseType(FastNoiseLite.NoiseType.OpenSimplex2);
+
+            // Controls the size of the hills.
+            _terrainNoise.SetFrequency(0.0025f);
+
+            // Adds detail at multiple scales.
+            _terrainNoise.SetFractalType(FastNoiseLite.FractalType.FBm);
+            _terrainNoise.SetFractalOctaves(5);
+            _terrainNoise.SetFractalLacunarity(2.0f);
+            _terrainNoise.SetFractalGain(0.45f);
+        }   
+
         private void GenerateMountainTrack()
         {
             _trackPoints.Clear();
@@ -228,7 +246,7 @@ namespace RaceGame3D
 
             _carPosition = new Vector3(
                 startPoint.X,
-                GetTerrainHeight(startPoint.X, startPoint.Z) + 1.0f,
+                GetTerrainHeight(startPoint.X, startPoint.Z) + 0.3f,
                 startPoint.Z);
 
             Vector3 startDirection = new Vector3(
@@ -252,17 +270,14 @@ namespace RaceGame3D
 
         private float GetTerrainHeight(float x, float z)
         {
-            // Broad hills: long uphill and downhill slopes
-            float broadHills =
-                MathF.Sin(x * 0.003f) * 8f +
-                MathF.Sin(z * 0.0025f) * 10f;
+            if (_terrainNoise == null)
+                return 0f;
 
-            // Smaller rolling hills
-            float rollingHills =
-                MathF.Sin((x + z) * 0.008f) * 3f +
-                MathF.Sin((x - z) * 0.006f) * 2f;
+            // Main rolling landscape.
+            float hills = _terrainNoise.GetNoise(x, z) * 12f;
 
-            return broadHills + rollingHills;
+            // Keep the terrain from becoming too extreme.
+            return hills;
         }
 
         private float GetRoadHeightAt(float x, float z)
